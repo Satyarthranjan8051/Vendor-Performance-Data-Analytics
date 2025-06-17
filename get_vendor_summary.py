@@ -11,67 +11,68 @@ logging.basicConfig(
     filemode="a",
 )
 
+
 def create_vendor_summary(conn):
     '''this function will merge the different tables to get the overall vendor summary and adding new columns in the resultant data'''
-    vendor_sales_summary = pd.read_sql_query("""WITH FreightSummary AS (
-                                            SELECT
-                                             VendorNumber,
-                                             SUM(Freight) AS FreightCost
-                                             FROM vendor_invoice)
-                                             Group By VendorNumber
-                                             ),
-                                             PurchaseSummary AS(
-                                             SELECT
-                                             p.VendorNumber,
-                                             p.VendorName,
-                                             p.Brand.
-                                             p.Description,
-                                             p.PurchasePrice
-                                             pp.Price AS ActualPrice,
-                                             pp.Volume,
-                                             SUM(p.Quantity) AS TotalQuantity,
-                                             Sum(p.Dollars) AS TotalPurchaseDollars
-                                                FROM purchase p
-                                                JOIN purchase_price pp
-                                                ON p.PurchasePrice > 0
-                                             Group By p.VendorNumber, p.VendorName, p.Brand, p.Description, p.PurchasePrice, pp.Price, pp.Volume 
-                                             ),
-
-                                                SalesSummary AS (
-                                                SELECT
-                                              VendorNo,
-                                             Brand,
-                                             Sum(SalesQuantity) AS TotalSalesQuantity,
-                                                Sum(SalesDollars) AS TotalSalesDollars,
-                                               SUM(SalesPrice) AS TotalSalesPrice,
-                                               SUM(ExciseTax) AS TotalExciseTax 
-                                                  FROM sales
-                                                GROUP BY VendorNo, Brand
-                                             )
-                                             SELECT
-                                                ps.VendorNumber,
-                                                ps.VendorName,
-                                                ps.Brand,
-                                                ps.Description,
-                                                ps.PurchasePrice,
-                                                ps.ActualPrice,
-                                                ps.Volume,
-                                                ps.TotalPurchaseQuantity,
-                                                ps.TotalPurchaseDollars,
-                                                ss.TotalSalesQuantity,
-                                                ss.TotalSalesDollars,
-                                                ss.TotalSalesPrice,
-                                                ss.TotalExciseTax,
-                                                fs.FreightCost
-                                                FROM PurchaseSummary ps
-                                                LEFT JOIN SalesSummary ss
-                                                ON ps.VendorNumber = ss.VendorNo
-                                                AND ps.Brand = ss.Brand
-                                                LEFT JOIN FreightSummary fs
-                                                ON ps.VendorNumber = fs.VendorNumber
-                                                ORDER BY ps.TotalPurchaseDollars DESC
-                                             )""", conn)
-    
+    vendor_sales_summary = pd.read_sql_query("""
+        WITH FreightSummary AS (
+            SELECT
+                VendorNumber,
+                SUM(Freight) AS FreightCost
+            FROM vendor_invoice
+            GROUP BY VendorNumber
+        ),
+        PurchaseSummary AS (
+            SELECT
+                p.VendorNumber,
+                p.VendorName,
+                p.Brand,
+                p.Description,
+                p.PurchasePrice,
+                pp.Price AS ActualPrice,
+                pp.Volume,
+                SUM(p.Quantity) AS TotalPurchaseQuantity,
+                SUM(p.Dollars) AS TotalPurchaseDollars
+            FROM purchases p
+            JOIN purchase_prices pp
+                ON p.Brand = pp.Brand
+            WHERE p.PurchasePrice > 0
+            GROUP BY p.VendorNumber, p.VendorName, p.Brand, p.Description, p.PurchasePrice, pp.Price, pp.Volume
+        ),
+        SalesSummary AS (
+            SELECT
+                VendorNo,
+                Brand,
+                SUM(SalesQuantity) AS TotalSalesQuantity,
+                SUM(SalesDollars) AS TotalSalesDollars,
+                SUM(SalesPrice) AS TotalSalesPrice,
+                SUM(ExciseTax) AS TotalExciseTax 
+            FROM sales
+            GROUP BY VendorNo, Brand
+        )
+        SELECT
+            ps.VendorNumber,
+            ps.VendorName,
+            ps.Brand,
+            ps.Description,
+            ps.PurchasePrice,
+            ps.ActualPrice,
+            ps.Volume,
+            ps.TotalPurchaseQuantity,
+            ps.TotalPurchaseDollars,
+            ss.TotalSalesQuantity,
+            ss.TotalSalesDollars,
+            ss.TotalSalesPrice,
+            ss.TotalExciseTax,
+            fs.FreightCost
+        FROM PurchaseSummary ps
+        LEFT JOIN SalesSummary ss
+            ON ps.VendorNumber = ss.VendorNo
+            AND ps.Brand = ss.Brand
+        LEFT JOIN FreightSummary fs
+            ON ps.VendorNumber = fs.VendorNumber
+        ORDER BY ps.TotalPurchaseDollars DESC
+    """, conn)
     return vendor_sales_summary
 
 def clean_data(df):
@@ -87,12 +88,13 @@ def clean_data(df):
     df['Description'] = df['Description'].str.strip()
 
     # creating new columns for better analysis
-    vendor_sales_summary['GrossProfit'] = vendor_sales_summary['TotalSalesDollars'] - vendor_sales_summary['TotalPurchaseDollars']
-    vendor_sales_summary['ProfitMargin'] = vendor_sales_summary['GrossProfit'] / vendor_sales_summary['TotalSalesDollars']*100
-    vendor_sales_summary['StockTurnover'] = vendor_sales_summary['TotalSalesQuantity'] / vendor_sales_summary['TotalPurchaseQuantity']
-    vendor_sales_summary['SalesToPurchaseRatio'] = vendor_sales_summary['TotalSalesDollars'] / vendor_sales_summary['TotalPurchaseDollars']
+    df['GrossProfit'] = df['TotalSalesDollars'] - df['TotalPurchaseDollars']
+    df['ProfitMargin'] = df['GrossProfit'] / df['TotalSalesDollars'] * 100
+    df['StockTurnover'] = df['TotalSalesQuantity'] / df['TotalPurchaseQuantity']
+    df['SalesToPurchaseRatio'] = df['TotalSalesDollars'] / df['TotalPurchaseDollars']
 
     return df
+
     
 if __name__ == "__main__":
     # creating database connection
